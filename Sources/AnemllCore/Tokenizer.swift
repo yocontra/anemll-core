@@ -395,14 +395,22 @@ public final class Tokenizer: @unchecked Sendable {
                 switch templateName.lowercased() {
                 case "gemma", "gemma3":
                     // Gemma format: <bos><start_of_turn>role\n{content}<end_of_turn>\n...
-                    // Note: Gemma3 doesn't support "system" role - it uses "model" for system messages
+                    // Gemma3 has no "system" role — the official template prepends system
+                    // content to the first user message with a \n\n separator.
                     var prompt = "<bos>"
-                    for message in messagesArray {
-                        let role = message["role"] as? String ?? "user"
-                        let content = message["content"] as? String ?? ""
-                        // Map both "assistant" and "system" to "model" for Gemma3
-                        let gemmaRole = (role == "assistant" || role == "system") ? "model" : role
-                        prompt += "<start_of_turn>\(gemmaRole)\n\(content)<end_of_turn>\n"
+                    var systemPrefix = ""
+                    var loopMessages = messagesArray
+                    if let first = loopMessages.first,
+                       (first["role"] ?? "") == "system" {
+                        systemPrefix = (first["content"] ?? "") + "\n\n"
+                        loopMessages.removeFirst()
+                    }
+                    for (index, message) in loopMessages.enumerated() {
+                        let role = message["role"] ?? "user"
+                        let content = message["content"] ?? ""
+                        let gemmaRole = role == "assistant" ? "model" : role
+                        let prefix = (index == 0) ? systemPrefix : ""
+                        prompt += "<start_of_turn>\(gemmaRole)\n\(prefix)\(content)<end_of_turn>\n"
                     }
                     prompt += "<start_of_turn>model\n"
                     formattedPrompt = prompt
